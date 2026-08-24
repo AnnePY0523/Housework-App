@@ -221,8 +221,11 @@ function pushCloudNow(){
   update(ref(fbDb), updates).catch(e=>console.warn('雲端存檔失敗', e));
 }
 function flushCloudNow(){ clearTimeout(cloudPushTimer); pushCloudNow(); }
+let lastAppliedCloudUpdatedAt = 0;
 function applyCloudSnapshot(coupleId, val){
   if(!val) return;
+  if(val.data && val.data.updatedAt && val.data.updatedAt <= lastAppliedCloudUpdatedAt) return; // 已是舊資料或自己的回音，跳過
+  if(val.data && val.data.updatedAt) lastAppliedCloudUpdatedAt = val.data.updatedAt;
   const memberUids = val.memberUids ? Object.keys(val.memberUids) : [];
   const memberNames = val.memberNames || {};
   state.users = memberUids.map(uidKey=>({id:uidKey, name: memberNames[uidKey] || '對方'}));
@@ -232,6 +235,7 @@ function applyCloudSnapshot(coupleId, val){
   if(val.data){ SHARED_KEYS.forEach(k=>{ if(val.data[k]!==undefined) state[k]=val.data[k]; }); }
   if(!state.currentUserId || !state.users.find(u=>u.id===state.currentUserId)) state.currentUserId = fbUid;
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
+  if(modalOpen) return; // 有彈窗開著時先不要強制重繪，避免把使用者正在填的表單蓋掉
   render();
 }
 function subscribeCloud(coupleId){
@@ -341,6 +345,7 @@ function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(
 /* ---------------- 主渲染 ---------------- */
 let currentTab = 'tasks';
 let storageWarningDismissed = false;
+let modalOpen = false; // 有彈窗開著時，避免雲端同步強制重繪把彈窗蓋掉
 function storageWarningBanner(){
   if(!storagePersistCheckFailed || storageWarningDismissed) return '';
   return `<div class="card" style="border-color:var(--danger);margin:12px 16px 0;">
@@ -660,6 +665,7 @@ function bindTasksTab(){
 function showAddTaskModal(existingTask){
   const slot=document.getElementById('modal-slot');
   const t = existingTask || {name:'',description:'',estMinutes:15,difficulty:'簡單',frequency:'單次'};
+  modalOpen = true;
   slot.innerHTML = `<div class="modal-bg" id="modal-bg">
     <div class="modal">
       <h3>${existingTask?'編輯家務任務':'新增家務任務'}</h3>
@@ -681,8 +687,8 @@ function showAddTaskModal(existingTask){
       </div>
     </div>
   </div>`;
-  document.getElementById('t-cancel').onclick=()=>{ slot.innerHTML=''; };
-  document.getElementById('modal-bg').onclick=(e)=>{ if(e.target.id==='modal-bg') slot.innerHTML=''; };
+  document.getElementById('t-cancel').onclick=()=>{ modalOpen=false; slot.innerHTML=''; render(); };
+  document.getElementById('modal-bg').onclick=(e)=>{ if(e.target.id==='modal-bg'){ modalOpen=false; slot.innerHTML=''; render(); } };
   document.getElementById('t-save').onclick=()=>{
     const name=document.getElementById('t-name').value.trim();
     if(!name){ toast('請輸入任務名稱'); return; }
@@ -699,7 +705,7 @@ function showAddTaskModal(existingTask){
       state.tasks.push({ id:uid(), ...data, createdBy: state.currentUserId });
       toast('任務已新增 ✅');
     }
-    save(); slot.innerHTML=''; render();
+    modalOpen=false; save(); slot.innerHTML=''; render();
   };
 }
 
@@ -932,6 +938,7 @@ function bindPenaltySection(){
 }
 function showAddRewardModal(){
   const slot=document.getElementById('reward-modal-slot');
+  modalOpen = true;
   slot.innerHTML = `<div class="modal-bg" id="reward-modal-bg">
     <div class="modal">
       <h3>新增獎勵</h3>
@@ -943,18 +950,19 @@ function showAddRewardModal(){
       </div>
     </div>
   </div>`;
-  document.getElementById('r-cancel').onclick=()=>{ slot.innerHTML=''; };
-  document.getElementById('reward-modal-bg').onclick=(e)=>{ if(e.target.id==='reward-modal-bg') slot.innerHTML=''; };
+  document.getElementById('r-cancel').onclick=()=>{ modalOpen=false; slot.innerHTML=''; render(); };
+  document.getElementById('reward-modal-bg').onclick=(e)=>{ if(e.target.id==='reward-modal-bg'){ modalOpen=false; slot.innerHTML=''; render(); } };
   document.getElementById('r-save').onclick=()=>{
     const name=document.getElementById('r-name').value.trim();
     const threshold=Number(document.getElementById('r-threshold').value)||0;
     if(!name || threshold<=0){ toast('請輸入獎勵名稱與門檻分數'); return; }
     state.rewards.push({id:uid(), name, threshold, createdBy:state.currentUserId});
-    save(); slot.innerHTML=''; render(); toast('獎勵已新增 ✅');
+    modalOpen=false; save(); slot.innerHTML=''; render(); toast('獎勵已新增 ✅');
   };
 }
 function showAddPenaltyModal(){
   const slot=document.getElementById('penalty-modal-slot');
+  modalOpen = true;
   slot.innerHTML = `<div class="modal-bg" id="penalty-modal-bg">
     <div class="modal">
       <h3>新增懲罰規則</h3>
@@ -970,8 +978,8 @@ function showAddPenaltyModal(){
       </div>
     </div>
   </div>`;
-  document.getElementById('p-cancel').onclick=()=>{ slot.innerHTML=''; };
-  document.getElementById('penalty-modal-bg').onclick=(e)=>{ if(e.target.id==='penalty-modal-bg') slot.innerHTML=''; };
+  document.getElementById('p-cancel').onclick=()=>{ modalOpen=false; slot.innerHTML=''; render(); };
+  document.getElementById('penalty-modal-bg').onclick=(e)=>{ if(e.target.id==='penalty-modal-bg'){ modalOpen=false; slot.innerHTML=''; render(); } };
   document.getElementById('p-save').onclick=()=>{
     const name=document.getElementById('p-name').value.trim();
     const text=document.getElementById('p-text').value.trim();
@@ -980,7 +988,7 @@ function showAddPenaltyModal(){
     const scope=document.getElementById('p-scope').value;
     if(!name || !text){ toast('請輸入規則名稱與懲罰內容'); return; }
     state.penalties.push({id:uid(), name, scope, threshold, penaltyPoints:points, penaltyText:text, createdBy:state.currentUserId});
-    save(); slot.innerHTML=''; render(); toast('懲罰規則已新增 ⚡');
+    modalOpen=false; save(); slot.innerHTML=''; render(); toast('懲罰規則已新增 ⚡');
   };
 }
 
