@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#8b5cf6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="家務積分">
+<title>家務積分 App 原型</title>
+<style>
+  :root{
+    --bg:#f6f3ff; --card:#ffffff; --text:#2a2438; --sub:#6b6480;
+    --primary:#8b5cf6; --primary-dark:#6d28d9; --accent:#f472b6;
+    --ok:#10b981; --warn:#f59e0b; --danger:#ef4444;
+    --border:#e6e1f7; --shadow:0 2px 10px rgba(107,70,193,.08);
+  }
+  [data-theme="dark"]{
+    --bg:#181422; --card:#241d33; --text:#f1eefb; --sub:#a79fc4;
+    --primary:#a78bfa; --primary-dark:#8b5cf6; --accent:#f9a8d4;
+    --border:#3a2f52; --shadow:0 2px 10px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg);color:var(--text);transition:background .2s,color .2s;}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:78px;position:relative;}
+  header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 8px;
+    display:flex;align-items:center;justify-content:space-between;}
+  header.top h1{font-size:17px;margin:0;}
+  header.top .sub{font-size:12px;color:var(--sub);}
+  .icon-btn{border:none;background:var(--card);width:38px;height:38px;border-radius:50%;
+    font-size:16px;cursor:pointer;box-shadow:var(--shadow);}
+  main{padding:6px 16px 16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;
+    margin-bottom:12px;box-shadow:var(--shadow);}
+  .card h3{margin:0 0 6px;font-size:15px;}
+  .muted{color:var(--sub);font-size:12.5px;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .btn{border:none;border-radius:10px;padding:10px 14px;font-size:14px;cursor:pointer;font-weight:600;}
+  .btn.primary{background:var(--primary);color:#fff;}
+  .btn.primary:active{background:var(--primary-dark);}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .btn.sm{padding:6px 10px;font-size:12.5px;border-radius:8px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+    background:var(--bg);color:var(--text);font-size:14px;margin-top:4px;}
+  label{font-size:12.5px;color:var(--sub);display:block;margin-top:10px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:600;}
+  .pill.pending{background:#fde68a55;color:#b45309;}
+  .pill.done{background:#a7f3d055;color:#047857;}
+  .pill.overdue{background:#fecaca66;color:#b91c1c;}
+  .pill.soon{background:#ddd6fe66;color:#6d28d9;}
+  .badge-diff{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--border);}
+  nav.bottom{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:var(--card);
+    border-top:1px solid var(--border);display:flex;justify-content:space-around;padding:8px 4px 10px;}
+  nav.bottom button{background:none;border:none;color:var(--sub);font-size:11px;display:flex;
+    flex-direction:column;align-items:center;gap:3px;cursor:pointer;flex:1;}
+  nav.bottom button.active{color:var(--primary);font-weight:700;}
+  nav.bottom button .ic{font-size:19px;}
+  .switcher{display:flex;background:var(--bg);border-radius:10px;padding:4px;gap:4px;margin-top:8px;}
+  .switcher button{flex:1;border:none;background:transparent;padding:8px;border-radius:8px;
+    font-size:13px;cursor:pointer;color:var(--sub);}
+  .switcher button.active{background:var(--primary);color:#fff;font-weight:700;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;
+    justify-content:center;z-index:50;padding:20px;}
+  .modal{background:var(--card);border-radius:18px;padding:20px;max-width:380px;width:100%;
+    max-height:88vh;overflow:auto;}
+  .toast{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:var(--primary);
+    color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;z-index:80;box-shadow:var(--shadow);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--border);}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:12px;}
+  .cal-grid .dow{color:var(--sub);font-weight:700;padding-bottom:4px;}
+  .cal-day{aspect-ratio:1;border-radius:10px;background:var(--bg);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;cursor:pointer;position:relative;border:1px solid transparent;}
+  .cal-day.today{border-color:var(--primary);}
+  .cal-day .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);position:absolute;bottom:5px;}
+  .cal-day.empty{background:transparent;cursor:default;}
+  .rank-row{display:flex;align-items:center;gap:10px;padding:8px 0;}
+  .rank-row .medal{width:26px;text-align:center;font-size:16px;}
+  .rank-row .bar-wrap{flex:1;height:8px;background:var(--bg);border-radius:6px;overflow:hidden;}
+  .rank-row .bar{height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));}
+  .empty-state{text-align:center;padding:30px 10px;color:var(--sub);font-size:13px;}
+  textarea{min-height:70px;font-size:11px;font-family:monospace;}
+  .flex-gap{display:flex;gap:8px;}
+  .flex-gap>*{flex:1;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ---------------- 全域錯誤保護：出錯時直接把原因顯示在畫面上 ---------------- */
+window.onerror = function(msg, url, line, col, error){
+  try{
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;background:#2a2438;color:#fff;padding:20px;font-family:sans-serif;z-index:9999;overflow:auto;';
+    box.innerHTML = '<h2 style="margin-top:0;">⚠️ 頁面發生錯誤</h2>'
+      + '<p style="color:#fca5a5;word-break:break-all;">' + String(msg) + '</p>'
+      + '<p style="font-size:12px;color:#c4b5fd;">位置：第 ' + line + ' 行</p>'
+      + '<p style="font-size:13px;color:#e5e7eb;margin-top:16px;">請把這個畫面截圖給開發者。</p>'
+      + '<button onclick="this.parentElement.remove()" style="margin-top:12px;padding:8px 16px;border:none;border-radius:8px;background:#8b5cf6;color:#fff;">關閉</button>';
+    document.body.appendChild(box);
+  }catch(e){}
+  return false;
+};
+
+/* ---------------- 資料層 ---------------- */
+const STORE_KEY = 'choreAppState_v1';
+const DIFF_POINTS = { '簡單':5, '中等':15, '困難':25 };
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function todayDate(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+function toKey(d){ return d.toISOString().slice(0,10); }
+function mondayOf(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+function sundayEndOf(d){ const m=mondayOf(d); const s=new Date(m); s.setDate(s.getDate()+6); s.setHours(23,59,59,999); return s; }
+function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+
+function defaultState(){
+  let prefersDark = false;
+  try{ prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){}
+  return { couple:null, users:[], currentUserId:null, tasks:[], assignments:[], ledger:[],
+           rewards:[], rewardClaims:[], penalties:[], penaltyExecutions:[],
+           theme: prefersDark ? 'dark':'light',
+           reminderHours:3, notifShown:{} };
+}
+let storageAvailable = true;
+let storagePersistCheckFailed = false;
+(function storageSelfCheck(){
+  try{
+    const testKey = '__storage_probe__';
+    localStorage.setItem(testKey, String(Date.now()));
+    if(localStorage.getItem(testKey)===null) storagePersistCheckFailed = true;
+  }catch(e){ storagePersistCheckFailed = true; }
+})();
+function loadState(){
+  try{ const raw = localStorage.getItem(STORE_KEY); if(raw) return JSON.parse(raw); }
+  catch(e){ storageAvailable = false; console.warn('本機儲存不可用，資料只會保留在這次瀏覽中', e); }
+  return defaultState();
+}
+let state = loadState();
+state.rewards = state.rewards || [];
+state.rewardClaims = state.rewardClaims || [];
+state.penalties = state.penalties || [];
+state.penaltyExecutions = state.penaltyExecutions || [];
+function save(){
+  if(!storageAvailable) return;
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ storageAvailable = false; console.warn('本機儲存不可用，資料只會保留在這次瀏覽中', e); }
+}
+
+function currentUser(){ return state.users.find(u=>u.id===state.currentUserId); }
+function partnerOf(userId){ return state.users.find(u=>u.id!==userId); }
+
+/* ---------------- 週期任務產生 ---------------- */
+function ensureAssignments(){
+  const today = todayDate();
+  state.tasks.forEach(task=>{
+    if(task.frequency==='單次'){
+      const key = 'once-'+task.id;
+      if(!state.assignments.find(a=>a.cycleKey===key)){
+        state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
+          status:'pending',dueDate:null,swapRequestedBy:null});
+      }
+    } else if(task.frequency==='每日'){
+      const key = 'd-'+task.id+'-'+toKey(today);
+      if(!state.assignments.find(a=>a.cycleKey===key)){
+        const due = new Date(today); due.setHours(23,59,59,999);
+        state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
+          status:'pending',dueDate:due.toISOString(),swapRequestedBy:null});
+      }
+    } else if(task.frequency==='每週'){
+      const mon = mondayOf(today);
+      const key = 'w-'+task.id+'-'+toKey(mon);
+      if(!state.assignments.find(a=>a.cycleKey===key)){
+        state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
+          status:'pending',dueDate:sundayEndOf(today).toISOString(),swapRequestedBy:null});
+      }
+    }
+  });
+  save();
+}
+
+function assignmentStatusInfo(a){
+  if(a.status==='done') return {label:'已完成',cls:'done'};
+  if(a.dueDate){
+    const due=new Date(a.dueDate), now=new Date();
+    if(now>due) return {label:'已逾期',cls:'overdue'};
+    if(due-now <= state.reminderHours*3600000) return {label:'即將到期',cls:'soon'};
+  }
+  return {label:'待處理',cls:'pending'};
+}
+
+/* ---------------- 完成計分 ---------------- */
+function completeAssignment(aid){
+  const a = state.assignments.find(x=>x.id===aid);
+  if(!a || a.status==='done') return;
+  const task = state.tasks.find(t=>t.id===a.taskId);
+  a.status='done'; a.doneAt=new Date().toISOString(); a.doneBy=state.currentUserId;
+  state.ledger.push({id:uid(),userId:state.currentUserId,assignmentId:aid,
+    points:DIFF_POINTS[task.difficulty]||5, awardedAt:new Date().toISOString()});
+  save(); render(); toast('✅ 完成！+'+(DIFF_POINTS[task.difficulty]||5)+' 分');
+}
+
+/* ---------------- 排行榜計算 ---------------- */
+function sumFor(userId, sinceISO, byCount){
+  const since = sinceISO ? new Date(sinceISO) : null;
+  const entries = state.ledger.filter(l=>l.userId===userId && (!since || new Date(l.awardedAt)>=since));
+  return byCount ? entries.length : entries.reduce((s,e)=>s+e.points,0);
+}
+
+/* ---------------- UI 共用 ---------------- */
+function toast(msg){
+  const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),1800);
+}
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
+
+/* ---------------- 主渲染 ---------------- */
+let currentTab = 'tasks';
+let storageWarningDismissed = false;
+function storageWarningBanner(){
+  if(!storagePersistCheckFailed || storageWarningDismissed) return '';
+  return `<div class="card" style="border-color:var(--danger);margin:12px 16px 0;">
+    <div class="row">
+      <div>⚠️ <b>這個瀏覽環境可能無法保存資料</b></div>
+      <button class="btn ghost sm" id="dismiss-storage-warning">知道了</button>
+    </div>
+    <p class="muted" style="margin-top:6px;">代表關閉頁面或重新打開後，紀錄可能會不見。常見原因是用「郵件/雲端硬碟附件預覽」或「快速預覽」開啟這個檔案，每次開啟都是暫存的新檔案。
+    解法：把這個檔案「儲存」到手機「檔案」App的固定資料夾（例如「我的iPhone」），之後都從「檔案」App裡打開同一份，才會記得住資料。</p>
+  </div>`;
+}
+function bindStorageWarning(){
+  const b = document.getElementById('dismiss-storage-warning');
+  if(b) b.onclick=()=>{ storageWarningDismissed=true; render(); };
+}
+function render(){
+  document.documentElement.setAttribute('data-theme', state.theme);
+  const app = document.getElementById('app');
+  if(!state.couple || state.users.length<2){
+    app.innerHTML = storageWarningBanner() + renderOnboarding();
+    bindOnboarding();
+    bindStorageWarning();
+    return;
+  }
+  ensureAssignments();
+  app.innerHTML = `
+    ${renderHeader()}
+    ${storageWarningBanner()}
+    <main id="main">${renderTab()}</main>
+    ${renderNav()}
+  `;
+  bindGlobal();
+  bindTab();
+  bindStorageWarning();
+}
+
+/* ---------- Onboarding ---------- */
+function renderOnboarding(){
+  if(!state.couple){
+    return `<div style="padding:40px 24px;max-width:420px;margin:0 auto;">
+      <div style="font-size:40px;text-align:center;">🏠💕</div>
+      <h2 style="text-align:center;">家務公平分配</h2>
+      <p class="muted" style="text-align:center;">建立你的空間，之後可以邀請另一半配對</p>
+      <div class="card">
+        <label>你的名字</label>
+        <input id="ob-name" placeholder="例如：小明">
+        <button class="btn primary" style="width:100%;margin-top:14px;" id="ob-create">建立我的家務空間</button>
+      </div>
+      <div class="card">
+        <p class="muted">已經有邀請碼？</p>
+        <input id="ob-code" placeholder="輸入 6 碼邀請碼">
+        <label style="margin-top:8px;">你的名字</label>
+        <input id="ob-join-name" placeholder="例如：小美">
+        <button class="btn ghost" style="width:100%;margin-top:14px;" id="ob-join">加入配對</button>
+      </div>
+    </div>`;
+  } else {
+    return `<div style="padding:40px 24px;max-width:420px;margin:0 auto;">
+      <div style="font-size:40px;text-align:center;">📨</div>
+      <h2 style="text-align:center;">等待另一半加入</h2>
+      <div class="card" style="text-align:center;">
+        <p class="muted">把這個邀請碼給你的另一半</p>
+        <div style="font-size:28px;font-weight:800;letter-spacing:4px;color:var(--primary);">${state.couple.inviteCode}</div>
+        <p class="muted" style="margin-top:10px;">（本原型為單裝置示範：對方可在同一台裝置上用下方表單模擬加入）</p>
+      </div>
+      <div class="card">
+        <label>對方名字</label>
+        <input id="ob-partner-name" placeholder="例如：小美">
+        <button class="btn primary" style="width:100%;margin-top:14px;" id="ob-simulate-join">模擬對方加入</button>
+      </div>
+    </div>`;
+  }
+}
+function bindOnboarding(){
+  const create = document.getElementById('ob-create');
+  if(create) create.onclick=()=>{
+    const name=document.getElementById('ob-name').value.trim();
+    if(!name){ toast('請輸入名字'); return; }
+    const userId=uid();
+    state.couple={id:uid(), inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(), createdAt:new Date().toISOString()};
+    state.users=[{id:userId,name,theme:'light'}];
+    state.currentUserId=userId;
+    save(); render();
+  };
+  const join = document.getElementById('ob-join');
+  if(join) join.onclick=()=>{
+    toast('本原型為單裝置示範，請在建立空間的裝置上使用「模擬對方加入」');
+  };
+  const sim = document.getElementById('ob-simulate-join');
+  if(sim) sim.onclick=()=>{
+    const name=document.getElementById('ob-partner-name').value.trim();
+    if(!name){ toast('請輸入對方名字'); return; }
+    const userId=uid();
+    state.users.push({id:userId,name,theme:'light'});
+    save(); toast('配對成功！🎉'); render();
+  };
+}
+
+/* ---------- Header / Nav ---------- */
+function renderHeader(){
+  const me = currentUser();
+  return `<header class="top">
+    <div>
+      <h1>家務積分 🏆</h1>
+      <div class="sub">目前身份：${me?me.name:''}</div>
+    </div>
+    <div class="row" style="gap:6px;">
+      <button class="icon-btn" id="theme-toggle" title="切換亮暗模式">${state.theme==='dark'?'☀️':'🌙'}</button>
+      <button class="icon-btn" id="switch-user" title="切換身份（示範用）">🔁</button>
+    </div>
+  </header>`;
+}
+function bindGlobal(){
+  document.getElementById('theme-toggle').onclick=()=>{ state.theme = state.theme==='dark'?'light':'dark'; save(); render(); };
+  document.getElementById('switch-user').onclick=()=>{
+    const other = partnerOf(state.currentUserId);
+    if(other){ state.currentUserId=other.id; save(); render(); toast('已切換為 '+other.name); }
+  };
+}
+function renderNav(){
+  const tabs=[['tasks','📋','任務'],['board','🏆','排行榜'],['rewards','🎁','獎勵'],['calendar','📅','日曆'],['settings','⚙️','設定']];
+  return `<nav class="bottom">${tabs.map(([id,ic,label])=>
+    `<button data-tab="${id}" class="${currentTab===id?'active':''}"><span class="ic">${ic}</span>${label}</button>`
+  ).join('')}</nav>`;
+}
+
+/* ---------- Tab Router ---------- */
+function renderTab(){
+  if(currentTab==='tasks') return renderTasksTab();
+  if(currentTab==='board') return renderBoardTab();
+  if(currentTab==='rewards') return renderRewardsTab();
+  if(currentTab==='calendar') return renderCalendarTab();
+  if(currentTab==='settings') return renderSettingsTab();
+  return '';
+}
+function bindTab(){
+  document.querySelectorAll('nav.bottom button').forEach(b=>{
+    b.onclick=()=>{ currentTab=b.dataset.tab; render(); };
+  });
+  if(currentTab==='tasks') bindTasksTab();
+  if(currentTab==='board') bindBoardTab();
+  if(currentTab==='rewards') bindRewardsTab();
+  if(currentTab==='calendar') bindCalendarTab();
+  if(currentTab==='settings') bindSettingsTab();
+}
+
+/* ---------- 任務 Tab ---------- */
+function renderTasksTab(){
+  const soonList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='soon');
+  const overdueList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='overdue');
+  let banner='';
+  if(overdueList.length || soonList.length){
+    banner = `<div class="card" style="border-color:var(--warn);">
+      ${overdueList.length?`<div>⚠️ <b>${overdueList.length}</b> 項任務已逾期</div>`:''}
+      ${soonList.length?`<div>⏰ <b>${soonList.length}</b> 項任務即將到期</div>`:''}
+    </div>`;
+    maybeNotify(overdueList.length, soonList.length);
+  }
+  const me = currentUser(); const other = partnerOf(state.currentUserId);
+  const groups = { mine:[], other:[], unassigned:[] };
+  state.tasks.forEach(t=>{
+    const list = state.assignments.filter(a=>a.taskId===t.id).sort((a,b)=>(b.cycleKey>a.cycleKey?1:-1));
+    const a = list[0];
+    if(!a || !a.assignedTo) groups.unassigned.push(t);
+    else if(a.assignedTo===state.currentUserId) groups.mine.push(t);
+    else groups.other.push(t);
+  });
+  function section(title, tasks){
+    if(!tasks.length) return '';
+    return `<h3 style="margin:16px 4px 8px;">${title}</h3>` + tasks.map(t=>renderTaskCard(t)).join('');
+  }
+  const body = state.tasks.length
+    ? section('🙋 我的任務（'+me.name+'）', groups.mine)
+      + section('🙆 '+other.name+' 的任務', groups.other)
+      + section('❔ 尚未指派', groups.unassigned)
+    : `<div class="empty-state">還沒有家務任務，點下方「新增任務」開始吧 ✨</div>`;
+  return `
+    ${banner}
+    <button class="btn primary" style="width:100%;" id="open-add-task">➕ 新增任務</button>
+    <div style="margin-top:12px;">${body}</div>
+    <div id="modal-slot"></div>
+  `;
+}
+function renderTaskCard(task){
+  const assignmentsForTask = state.assignments.filter(a=>a.taskId===task.id)
+    .sort((a,b)=> (b.cycleKey>a.cycleKey?1:-1));
+  const a = assignmentsForTask[0];
+  const info = assignmentStatusInfo(a);
+  const assignee = a.assignedTo ? state.users.find(u=>u.id===a.assignedTo) : null;
+  const me = currentUser(); const other = partnerOf(state.currentUserId);
+  const canComplete = a.status!=='done' && a.assignedTo===state.currentUserId;
+  const swapBanner = a.swapRequestedBy && a.swapRequestedBy!==state.currentUserId ?
+    `<div class="card" style="margin-top:8px;background:var(--bg);">
+      <div class="muted">🔄 ${state.users.find(u=>u.id===a.swapRequestedBy)?.name} 想請你接手這個任務</div>
+      <div class="flex-gap" style="margin-top:8px;">
+        <button class="btn primary sm" data-swap-accept="${a.id}">接受</button>
+        <button class="btn ghost sm" data-swap-reject="${a.id}">拒絕</button>
+      </div>
+    </div>` : '';
+  return `<div class="card">
+    <div class="row">
+      <h3>${task.name}</h3>
+      <span class="pill ${info.cls}">${info.label}</span>
+    </div>
+    ${task.description?`<div class="muted">${task.description}</div>`:''}
+    <div class="row" style="margin-top:8px;">
+      <span class="badge-diff">${task.difficulty} · +${DIFF_POINTS[task.difficulty]}分</span>
+      <span class="badge-diff">${task.frequency} · ${task.estMinutes}分鐘</span>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="muted">負責人：${assignee?assignee.name:'尚未指派'}</div>
+      <div class="flex-gap" style="max-width:60%;">
+        <select data-assign="${a.id}" style="margin-top:0;">
+          <option value="">指派給...</option>
+          <option value="${me.id}" ${a.assignedTo===me.id?'selected':''}>${me.name}（我）</option>
+          <option value="${other.id}" ${a.assignedTo===other.id?'selected':''}>${other.name}</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex-gap" style="margin-top:10px;">
+      <button class="btn ghost sm" data-random="${a.id}">🎲 隨機分配</button>
+      ${a.status!=='done' && a.assignedTo===state.currentUserId ? `<button class="btn ghost sm" data-request-swap="${a.id}">🔄 請對方接手</button>`:''}
+      <button class="btn primary sm" data-complete="${a.id}" ${canComplete?'':'disabled'}>${a.status==='done'?'已完成 ✔':'標記完成'}</button>
+    </div>
+    ${swapBanner}
+    <div class="flex-gap" style="margin-top:8px;justify-content:flex-end;">
+      <button class="btn ghost sm" data-edit-task="${task.id}">✏️ 編輯</button>
+      <button class="btn ghost sm" data-del-task="${task.id}">🗑 刪除</button>
+    </div>
+  </div>`;
+}
+function maybeNotify(overdueCount, soonCount){
+  if(!('Notification' in window) || Notification.permission!=='granted') return;
+  const key = toKey(todayDate());
+  if(state.notifShown[key]) return;
+  if(overdueCount>0){
+    new Notification('家務提醒', {body:`你有 ${overdueCount} 項任務已逾期`});
+    state.notifShown[key]=true; save();
+  }
+}
+function bindTasksTab(){
+  const openBtn=document.getElementById('open-add-task');
+  if(openBtn) openBtn.onclick=()=>showAddTaskModal();
+  document.querySelectorAll('[data-assign]').forEach(s=>s.onchange=(e)=>{
+    const a=state.assignments.find(x=>x.id===s.dataset.assign);
+    a.assignedTo = e.target.value || null; save(); render();
+  });
+  document.querySelectorAll('[data-random]').forEach(b=>b.onclick=()=>{
+    const a=state.assignments.find(x=>x.id===b.dataset.random);
+    const ids=state.users.map(u=>u.id);
+    a.assignedTo = ids[Math.floor(Math.random()*ids.length)];
+    save(); render(); toast('已隨機分配 🎲');
+  });
+  document.querySelectorAll('[data-complete]').forEach(b=>b.onclick=()=>completeAssignment(b.dataset.complete));
+  document.querySelectorAll('[data-request-swap]').forEach(b=>b.onclick=()=>{
+    const a=state.assignments.find(x=>x.id===b.dataset.requestSwap);
+    a.swapRequestedBy = state.currentUserId; save(); render(); toast('已送出交換請求');
+  });
+  document.querySelectorAll('[data-swap-accept]').forEach(b=>b.onclick=()=>{
+    const a=state.assignments.find(x=>x.id===b.dataset.swapAccept);
+    a.assignedTo = state.currentUserId; a.swapRequestedBy=null; save(); render(); toast('已接手任務');
+  });
+  document.querySelectorAll('[data-swap-reject]').forEach(b=>b.onclick=()=>{
+    const a=state.assignments.find(x=>x.id===b.dataset.swapReject);
+    a.swapRequestedBy=null; save(); render(); toast('已拒絕交換');
+  });
+  document.querySelectorAll('[data-del-task]').forEach(b=>b.onclick=()=>{
+    if(!confirm('確定刪除此任務？（歷史積分不會被移除）')) return;
+    state.tasks = state.tasks.filter(t=>t.id!==b.dataset.delTask);
+    state.assignments = state.assignments.filter(a=>a.taskId!==b.dataset.delTask);
+    save(); render();
+  });
+  document.querySelectorAll('[data-edit-task]').forEach(b=>b.onclick=()=>{
+    showAddTaskModal(state.tasks.find(t=>t.id===b.dataset.editTask));
+  });
+}
+function showAddTaskModal(existingTask){
+  const slot=document.getElementById('modal-slot');
+  const t = existingTask || {name:'',description:'',estMinutes:15,difficulty:'簡單',frequency:'單次'};
+  slot.innerHTML = `<div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <h3>${existingTask?'編輯家務任務':'新增家務任務'}</h3>
+      <label>任務名稱</label><input id="t-name" placeholder="例如：洗碗" value="${t.name}">
+      <label>描述（選填）</label><input id="t-desc" placeholder="例如：包含烘碗機收拾" value="${t.description||''}">
+      <label>預估耗時（分鐘）</label><input id="t-min" type="number" value="${t.estMinutes}">
+      <label>難度</label>
+      <select id="t-diff">
+        ${['簡單','中等','困難'].map(d=>`<option ${t.difficulty===d?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <label>頻率</label>
+      <select id="t-freq">
+        ${['單次','每日','每週'].map(f=>`<option ${t.frequency===f?'selected':''}>${f}</option>`).join('')}
+      </select>
+      ${existingTask?'<p class="muted" style="margin-top:8px;">修改頻率會在下個週期生效，歷史紀錄不受影響。</p>':''}
+      <div class="flex-gap" style="margin-top:16px;">
+        <button class="btn ghost" id="t-cancel">取消</button>
+        <button class="btn primary" id="t-save">儲存</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('t-cancel').onclick=()=>{ slot.innerHTML=''; };
+  document.getElementById('modal-bg').onclick=(e)=>{ if(e.target.id==='modal-bg') slot.innerHTML=''; };
+  document.getElementById('t-save').onclick=()=>{
+    const name=document.getElementById('t-name').value.trim();
+    if(!name){ toast('請輸入任務名稱'); return; }
+    const data = {
+      name, description:document.getElementById('t-desc').value.trim(),
+      estMinutes: Number(document.getElementById('t-min').value)||10,
+      difficulty: document.getElementById('t-diff').value,
+      frequency: document.getElementById('t-freq').value
+    };
+    if(existingTask){
+      Object.assign(existingTask, data);
+      toast('任務已更新 ✅');
+    } else {
+      state.tasks.push({ id:uid(), ...data, createdBy: state.currentUserId });
+      toast('任務已新增 ✅');
+    }
+    save(); slot.innerHTML=''; render();
+  };
+}
+
+/* ---------- 排行榜 Tab ---------- */
+let boardMode='points'; let boardRange='week';
+function renderBoardTab(){
+  const today=todayDate();
+  const sinceMap = {
+    week: mondayOf(today).toISOString(),
+    month: new Date(today.getFullYear(), today.getMonth(),1).toISOString(),
+    all: null
+  };
+  const since = sinceMap[boardRange];
+  const rows = state.users.map(u=>({user:u, value: sumFor(u.id, since, boardMode==='count')}))
+    .sort((a,b)=>b.value-a.value);
+  const max = Math.max(1, ...rows.map(r=>r.value));
+  const rangeLabel={week:'本週',month:'本月',all:'總排行'}[boardRange];
+  return `
+    <div class="card">
+      <div class="switcher">
+        ${['week','month','all'].map(r=>`<button data-range="${r}" class="${boardRange===r?'active':''}">${({week:'週榜',month:'月榜',all:'總榜'})[r]}</button>`).join('')}
+      </div>
+      <div class="switcher" style="margin-top:8px;">
+        <button data-mode="points" class="${boardMode==='points'?'active':''}">依積分</button>
+        <button data-mode="count" class="${boardMode==='count'?'active':''}">依完成任務數</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🏆 ${rangeLabel}${rows[0] && rows[0].value>0 ? '　第一：'+rows[0].user.name+' '+rows[0].value+(boardMode==='points'?' 分':' 項') : ''}</h3>
+      ${rows.map((r,i)=>`
+        <div class="rank-row">
+          <div class="medal">${i===0?'🥇':i===1?'🥈':'🎗'}</div>
+          <div style="flex:0 0 70px;">${r.user.name}</div>
+          <div class="bar-wrap"><div class="bar" style="width:${(r.value/max*100)||0}%;"></div></div>
+          <div style="flex:0 0 50px;text-align:right;font-weight:700;">${r.value}${boardMode==='points'?'分':'項'}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+function bindBoardTab(){
+  document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{ boardRange=b.dataset.range; render(); });
+  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ boardMode=b.dataset.mode; render(); });
+}
+
+/* ---------- 日曆 Tab ---------- */
+let calMonthOffset=0;
+function renderCalendarTab(){
+  const base=new Date(); base.setDate(1); base.setMonth(base.getMonth()+calMonthOffset);
+  const year=base.getFullYear(), month=base.getMonth();
+  const firstDow=(new Date(year,month,1).getDay()+6)%7; // Monday=0
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const todayStr = toKey(todayDate());
+  const cells=[];
+  for(let i=0;i<firstDow;i++) cells.push(`<div class="cal-day empty"></div>`);
+  for(let d=1; d<=daysInMonth; d++){
+    const dateObj=new Date(year,month,d); const key=toKey(dateObj);
+    const hasTask = state.assignments.some(a=>{
+      if(!a.dueDate) return false;
+      return toKey(new Date(a.dueDate))===key;
+    });
+    cells.push(`<div class="cal-day ${key===todayStr?'today':''}" data-day="${key}">${d}${hasTask?'<span class="dot"></span>':''}</div>`);
+  }
+  const detail = window.__calSelected ? renderDayDetail(window.__calSelected) : '';
+  return `
+    <div class="card">
+      <div class="row">
+        <button class="btn ghost sm" id="cal-prev">‹</button>
+        <h3>${year} 年 ${month+1} 月</h3>
+        <button class="btn ghost sm" id="cal-next">›</button>
+      </div>
+      <div class="cal-grid" style="margin-top:10px;">
+        ${['一','二','三','四','五','六','日'].map(d=>`<div class="dow">${d}</div>`).join('')}
+        ${cells.join('')}
+      </div>
+    </div>
+    ${detail}
+  `;
+}
+function renderDayDetail(key){
+  const items = state.assignments.filter(a=>a.dueDate && toKey(new Date(a.dueDate))===key);
+  return `<div class="card">
+    <h3>${key} 的家務</h3>
+    ${items.length? items.map(a=>{
+      const task=state.tasks.find(t=>t.id===a.taskId);
+      const assignee=a.assignedTo?state.users.find(u=>u.id===a.assignedTo):null;
+      return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+        <div>${task?task.name:'(已刪除)'} <span class="muted">· ${assignee?assignee.name:'未指派'}</span></div>
+        <span class="pill ${assignmentStatusInfo(a).cls}">${assignmentStatusInfo(a).label}</span>
+      </div>`;
+    }).join('') : `<div class="empty-state">這天沒有安排家務</div>`}
+  </div>`;
+}
+function bindCalendarTab(){
+  document.getElementById('cal-prev').onclick=()=>{ calMonthOffset--; render(); };
+  document.getElementById('cal-next').onclick=()=>{ calMonthOffset++; render(); };
+  document.querySelectorAll('.cal-day[data-day]').forEach(d=>d.onclick=()=>{ window.__calSelected=d.dataset.day; render(); });
+}
+
+/* ---------- 獎勵／懲罰 Tab ---------- */
+let rewardsPageMode='reward';
+function renderRewardsTab(){
+  return `
+    <div class="card">
+      <div class="switcher">
+        <button data-rpmode="reward" class="${rewardsPageMode==='reward'?'active':''}">🎁 獎勵</button>
+        <button data-rpmode="penalty" class="${rewardsPageMode==='penalty'?'active':''}">⚡ 懲罰</button>
+      </div>
+    </div>
+    ${rewardsPageMode==='reward' ? renderRewardSection() : renderPenaltySection()}
+  `;
+}
+function renderRewardSection(){
+  const cards = state.rewards.length ? state.rewards.map(r=>renderRewardCard(r)).join('') :
+    `<div class="empty-state">還沒有設定獎勵，點下方「新增獎勵」開始吧 🎁</div>`;
+  return `
+    <div class="card">
+      <p class="muted">設定積分門檻，達標後即可兌換自訂獎項（例如：100分＝看一場電影）。判斷依據是雙方的累積總積分。</p>
+    </div>
+    <button class="btn primary" style="width:100%;" id="open-add-reward">➕ 新增獎勵</button>
+    <div style="margin-top:12px;">${cards}</div>
+    <div id="reward-modal-slot"></div>
+  `;
+}
+function renderPenaltySection(){
+  const cards = state.penalties.length ? state.penalties.map(p=>renderPenaltyCard(p)).join('') :
+    `<div class="empty-state">還沒有設定懲罰規則，點下方「新增懲罰規則」開始吧 ⚡</div>`;
+  return `
+    <div class="card">
+      <p class="muted">設定期間內的最低積分門檻，若未達標可執行懲罰（扣分＋自訂內容，例如：洗兩週碗）。</p>
+    </div>
+    <button class="btn primary" style="width:100%;" id="open-add-penalty">➕ 新增懲罰規則</button>
+    <div style="margin-top:12px;">${cards}</div>
+    <div id="penalty-modal-slot"></div>
+  `;
+}
+function periodInfo(scope){
+  const today=todayDate();
+  if(scope==='month'){
+    return { since:new Date(today.getFullYear(),today.getMonth(),1).toISOString(), key:'m-'+monthKey(today), label:'本月' };
+  }
+  return { since: mondayOf(today).toISOString(), key:'w-'+toKey(mondayOf(today)), label:'本週' };
+}
+function renderPenaltyCard(p){
+  const period = periodInfo(p.scope);
+  const rows = state.users.map(u=>{
+    const pts = sumFor(u.id, period.since, false);
+    const met = pts >= p.threshold;
+    const executed = state.penaltyExecutions.find(e=>e.penaltyId===p.id && e.userId===u.id && e.periodKey===period.key);
+    const pct = Math.min(100, Math.round(pts/p.threshold*100)) || 0;
+    return `<div style="margin-top:10px;">
+      <div class="row"><span>${u.name}</span><span class="muted">${pts} / ${p.threshold} 分（${period.label}）</span></div>
+      <div class="bar-wrap" style="height:8px;margin-top:4px;"><div class="bar" style="width:${pct}%;${met?'':'background:linear-gradient(90deg,#f87171,#fb923c);'}"></div></div>
+      ${met
+        ? `<span class="pill done" style="margin-top:6px;display:inline-block;">✅ 達標，本期免懲罰</span>`
+        : executed
+          ? `<span class="pill overdue" style="margin-top:6px;display:inline-block;">⚡ 已執行懲罰（${executed.executedAt.slice(0,10)}）</span>`
+          : `<button class="btn ghost sm" style="margin-top:6px;border-color:var(--danger);color:var(--danger);" data-execute-penalty="${p.id}|${u.id}">⚡ 執行懲罰（扣${p.penaltyPoints}分）</button>`}
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <div class="row">
+      <h3>⚡ ${p.name}</h3>
+      <span class="badge-diff">${period.label}低於 ${p.threshold} 分</span>
+    </div>
+    <div class="muted" style="margin-top:4px;">懲罰內容：${p.penaltyText}</div>
+    ${rows}
+    <div style="margin-top:10px;text-align:right;"><button class="btn ghost sm" data-del-penalty="${p.id}">🗑 刪除規則</button></div>
+  </div>`;
+}
+function renderRewardCard(reward){
+  const rows = state.users.map(u=>{
+    const pts = sumFor(u.id, null, false);
+    const claimed = state.rewardClaims.find(c=>c.rewardId===reward.id && c.userId===u.id);
+    const pct = Math.min(100, Math.round(pts/reward.threshold*100)) || 0;
+    return `<div style="margin-top:10px;">
+      <div class="row"><span>${u.name}</span><span class="muted">${pts} / ${reward.threshold} 分</span></div>
+      <div class="bar-wrap" style="height:8px;margin-top:4px;"><div class="bar" style="width:${pct}%;"></div></div>
+      ${claimed
+        ? `<span class="pill done" style="margin-top:6px;display:inline-block;">✅ 已於 ${claimed.claimedAt.slice(0,10)} 兌換</span>`
+        : `<button class="btn primary sm" style="margin-top:6px;" data-claim="${reward.id}|${u.id}" ${pts>=reward.threshold?'':'disabled'}>🎉 兌換獎勵</button>`}
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <div class="row">
+      <h3>🎁 ${reward.name}</h3>
+      <span class="badge-diff">需 ${reward.threshold} 分</span>
+    </div>
+    ${rows}
+    <div style="margin-top:10px;text-align:right;"><button class="btn ghost sm" data-del-reward="${reward.id}">🗑 刪除</button></div>
+  </div>`;
+}
+function bindRewardsTab(){
+  document.querySelectorAll('[data-rpmode]').forEach(b=>b.onclick=()=>{ rewardsPageMode=b.dataset.rpmode; render(); });
+  if(rewardsPageMode==='reward') bindRewardSection(); else bindPenaltySection();
+}
+function bindRewardSection(){
+  document.getElementById('open-add-reward').onclick=()=>showAddRewardModal();
+  document.querySelectorAll('[data-claim]').forEach(b=>b.onclick=()=>{
+    const [rewardId,userId]=b.dataset.claim.split('|');
+    state.rewardClaims.push({id:uid(),rewardId,userId,claimedAt:new Date().toISOString()});
+    save(); render(); toast('🎉 兌換成功！記得跟對方領取獎勵～');
+  });
+  document.querySelectorAll('[data-del-reward]').forEach(b=>b.onclick=()=>{
+    if(!confirm('確定刪除此獎勵？兌換紀錄也會一併移除')) return;
+    state.rewards = state.rewards.filter(r=>r.id!==b.dataset.delReward);
+    state.rewardClaims = state.rewardClaims.filter(c=>c.rewardId!==b.dataset.delReward);
+    save(); render();
+  });
+}
+function bindPenaltySection(){
+  const openBtn=document.getElementById('open-add-penalty');
+  if(openBtn) openBtn.onclick=()=>showAddPenaltyModal();
+  document.querySelectorAll('[data-execute-penalty]').forEach(b=>b.onclick=()=>{
+    const [penaltyId,userId]=b.dataset.executePenalty.split('|');
+    const p = state.penalties.find(x=>x.id===penaltyId);
+    const period = periodInfo(p.scope);
+    if(!confirm(`確定對這期執行懲罰？\n扣 ${p.penaltyPoints} 分\n懲罰內容：${p.penaltyText}`)) return;
+    state.ledger.push({id:uid(), userId, assignmentId:null,
+      points:-Math.abs(p.penaltyPoints), awardedAt:new Date().toISOString(), reason:'penalty:'+p.id});
+    state.penaltyExecutions.push({id:uid(), penaltyId, userId, periodKey:period.key, executedAt:new Date().toISOString()});
+    save(); render(); toast('⚡ 已執行懲罰：'+p.penaltyText);
+  });
+  document.querySelectorAll('[data-del-penalty]').forEach(b=>b.onclick=()=>{
+    if(!confirm('確定刪除此懲罰規則？執行紀錄也會一併移除')) return;
+    state.penalties = state.penalties.filter(x=>x.id!==b.dataset.delPenalty);
+    state.penaltyExecutions = state.penaltyExecutions.filter(e=>e.penaltyId!==b.dataset.delPenalty);
+    save(); render();
+  });
+}
+function showAddRewardModal(){
+  const slot=document.getElementById('reward-modal-slot');
+  slot.innerHTML = `<div class="modal-bg" id="reward-modal-bg">
+    <div class="modal">
+      <h3>新增獎勵</h3>
+      <label>獎勵名稱</label><input id="r-name" placeholder="例如：看一場電影">
+      <label>達到分數門檻</label><input id="r-threshold" type="number" value="100">
+      <div class="flex-gap" style="margin-top:16px;">
+        <button class="btn ghost" id="r-cancel">取消</button>
+        <button class="btn primary" id="r-save">儲存</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('r-cancel').onclick=()=>{ slot.innerHTML=''; };
+  document.getElementById('reward-modal-bg').onclick=(e)=>{ if(e.target.id==='reward-modal-bg') slot.innerHTML=''; };
+  document.getElementById('r-save').onclick=()=>{
+    const name=document.getElementById('r-name').value.trim();
+    const threshold=Number(document.getElementById('r-threshold').value)||0;
+    if(!name || threshold<=0){ toast('請輸入獎勵名稱與門檻分數'); return; }
+    state.rewards.push({id:uid(), name, threshold, createdBy:state.currentUserId});
+    save(); slot.innerHTML=''; render(); toast('獎勵已新增 ✅');
+  };
+}
+function showAddPenaltyModal(){
+  const slot=document.getElementById('penalty-modal-slot');
+  slot.innerHTML = `<div class="modal-bg" id="penalty-modal-bg">
+    <div class="modal">
+      <h3>新增懲罰規則</h3>
+      <label>規則名稱</label><input id="p-name" placeholder="例如：每週基本任務量">
+      <label>檢查期間</label>
+      <select id="p-scope"><option value="week">本週</option><option value="month">本月</option></select>
+      <label>最低積分門檻（未達到視為未達標）</label><input id="p-threshold" type="number" value="30">
+      <label>扣除積分</label><input id="p-points" type="number" value="10">
+      <label>懲罰內容（自訂）</label><input id="p-text" placeholder="例如：幫對方按摩30分鐘">
+      <div class="flex-gap" style="margin-top:16px;">
+        <button class="btn ghost" id="p-cancel">取消</button>
+        <button class="btn primary" id="p-save">儲存</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('p-cancel').onclick=()=>{ slot.innerHTML=''; };
+  document.getElementById('penalty-modal-bg').onclick=(e)=>{ if(e.target.id==='penalty-modal-bg') slot.innerHTML=''; };
+  document.getElementById('p-save').onclick=()=>{
+    const name=document.getElementById('p-name').value.trim();
+    const text=document.getElementById('p-text').value.trim();
+    const threshold=Number(document.getElementById('p-threshold').value)||0;
+    const points=Number(document.getElementById('p-points').value)||0;
+    const scope=document.getElementById('p-scope').value;
+    if(!name || !text){ toast('請輸入規則名稱與懲罰內容'); return; }
+    state.penalties.push({id:uid(), name, scope, threshold, penaltyPoints:points, penaltyText:text, createdBy:state.currentUserId});
+    save(); slot.innerHTML=''; render(); toast('懲罰規則已新增 ⚡');
+  };
+}
+
+/* ---------- 設定 Tab ---------- */
+function renderSettingsTab(){
+  const notifPerm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  return `
+    <div class="card">
+      <h3>👤 家庭成員</h3>
+      ${state.users.map(u=>`<div class="row" style="padding:4px 0;">${u.name} ${u.id===state.currentUserId?'（目前身份）':''}</div>`).join('')}
+      <div class="muted" style="margin-top:6px;">邀請碼：${state.couple.inviteCode}</div>
+    </div>
+    <div class="card">
+      <h3>🔔 提醒設定</h3>
+      <label>提前提醒時數</label>
+      <input id="set-remind-hours" type="number" value="${state.reminderHours}">
+      <button class="btn ghost sm" style="margin-top:10px;" id="ask-notif">${notifPerm==='granted'?'✅ 已開啟瀏覽器通知':'開啟瀏覽器通知'}</button>
+    </div>
+    <div class="card">
+      <h3>🎨 外觀</h3>
+      <div class="switcher">
+        <button data-theme-set="light" class="${state.theme==='light'?'active':''}">☀️ 亮色</button>
+        <button data-theme-set="dark" class="${state.theme==='dark'?'active':''}">🌙 暗色</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🔗 雙人同步碼</h3>
+      <p class="muted">操作完想同步給對方時，按「產生同步碼」→「複製」→ 傳給對方（LINE、訊息皆可）→ 對方貼到下面「匯入」，兩邊資料就會一致。</p>
+      <div class="flex-gap">
+        <button class="btn ghost sm" id="gen-sync">產生同步碼</button>
+        <button class="btn ghost sm" id="copy-sync">📋 複製</button>
+      </div>
+      <textarea id="sync-out" readonly placeholder="按左邊按鈕產生..."></textarea>
+      <label>貼上對方的同步碼並匯入</label>
+      <textarea id="sync-in" placeholder="貼上對方給你的同步碼"></textarea>
+      <button class="btn primary sm" id="import-sync" style="margin-top:8px;">匯入</button>
+    </div>
+    <div class="card">
+      <h3>⚠️ 重置</h3>
+      <button class="btn ghost sm" id="reset-all">清除所有示範資料</button>
+    </div>
+  `;
+}
+function bindSettingsTab(){
+  document.getElementById('set-remind-hours').onchange=(e)=>{ state.reminderHours=Number(e.target.value)||3; save(); };
+  document.getElementById('ask-notif').onclick=()=>{
+    if('Notification' in window) Notification.requestPermission().then(()=>render());
+  };
+  document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{ state.theme=b.dataset.themeSet; save(); render(); });
+  document.getElementById('gen-sync').onclick=()=>{
+    document.getElementById('sync-out').value = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    toast('同步碼已產生，請按「複製」傳給對方');
+  };
+  document.getElementById('copy-sync').onclick=async ()=>{
+    const val = document.getElementById('sync-out').value;
+    if(!val){ toast('請先按「產生同步碼」'); return; }
+    try{
+      await navigator.clipboard.writeText(val);
+      toast('已複製，貼給對方吧 📋');
+    }catch(e){
+      const ta = document.getElementById('sync-out');
+      ta.select(); ta.setSelectionRange(0, val.length);
+      toast('請手動長按選取全部文字複製');
+    }
+  };
+  document.getElementById('import-sync').onclick=()=>{
+    try{
+      const val=document.getElementById('sync-in').value.trim();
+      const parsed=JSON.parse(decodeURIComponent(escape(atob(val))));
+      state=parsed; save(); render(); toast('匯入成功 ✅');
+    }catch(e){ toast('同步碼格式錯誤'); }
+  };
+  document.getElementById('reset-all').onclick=()=>{
+    if(!confirm('確定要清除所有資料嗎？此動作無法復原')) return;
+    state=defaultState(); save(); render();
+  };
+}
+
+/* ---------------- 主畫面安裝支援（PWA manifest / icon） ---------------- */
+(function setupHomeScreenInstall(){
+  try{
+    const canvas = document.createElement('canvas');
+    canvas.width = 192; canvas.height = 192;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,192,192);
+    grad.addColorStop(0,'#8b5cf6'); grad.addColorStop(1,'#f472b6');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,192,192);
+    ctx.font = '120px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🏆', 96, 112);
+    const iconUrl = canvas.toDataURL('image/png');
+
+    const manifest = {
+      name:'家務積分 App', short_name:'家務積分', start_url:'./', scope:'./',
+      display:'standalone', background_color:'#f6f3ff', theme_color:'#8b5cf6',
+      icons:[{src:iconUrl, sizes:'192x192', type:'image/png'}]
+    };
+    const manifestUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
+
+    const manifestLink = document.createElement('link');
+    manifestLink.rel='manifest'; manifestLink.href=manifestUrl;
+    document.head.appendChild(manifestLink);
+
+    const iconLink = document.createElement('link');
+    iconLink.rel='icon'; iconLink.href=iconUrl;
+    document.head.appendChild(iconLink);
+
+    const appleIcon = document.createElement('link');
+    appleIcon.rel='apple-touch-icon'; appleIcon.href=iconUrl;
+    document.head.appendChild(appleIcon);
+  }catch(e){ /* 靜默失敗，不影響主功能 */ }
+})();
+
+render();
+</script>
+</body>
+</html>
