@@ -235,7 +235,12 @@ function applyCloudSnapshot(coupleId, val){
   if(val.data){ SHARED_KEYS.forEach(k=>{ if(val.data[k]!==undefined) state[k]=val.data[k]; }); }
   if(!state.currentUserId || !state.users.find(u=>u.id===state.currentUserId)) state.currentUserId = fbUid;
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
-  if(modalOpen) return; // 有彈窗開著時先不要強制重繪，避免把使用者正在填的表單蓋掉
+  if(modalOpen || isEditingSomething()){
+    // 有彈窗開著、或正在點選欄位（例如指派任務的下拉選單）時，先不要強制重繪，
+    // 避免畫面被蓋掉造成「閃退」；資料已經存好了，等使用者操作完會自動補畫面。
+    scheduleDeferredRender();
+    return;
+  }
   render();
 }
 function subscribeCloud(coupleId){
@@ -281,12 +286,14 @@ function partnerOf(userId){ return state.users.find(u=>u.id!==userId); }
 /* ---------------- 週期任務產生 ---------------- */
 function ensureAssignments(){
   const today = todayDate();
+  let changed = false;
   state.tasks.forEach(task=>{
     if(task.frequency==='單次'){
       const key = 'once-'+task.id;
       if(!state.assignments.find(a=>a.cycleKey===key)){
         state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
           status:'pending',dueDate:null,swapRequestedBy:null});
+        changed = true;
       }
     } else if(task.frequency==='每日'){
       const key = 'd-'+task.id+'-'+toKey(today);
@@ -294,6 +301,7 @@ function ensureAssignments(){
         const due = new Date(today); due.setHours(23,59,59,999);
         state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
           status:'pending',dueDate:due.toISOString(),swapRequestedBy:null});
+        changed = true;
       }
     } else if(task.frequency==='每週'){
       const mon = mondayOf(today);
@@ -301,10 +309,13 @@ function ensureAssignments(){
       if(!state.assignments.find(a=>a.cycleKey===key)){
         state.assignments.push({id:uid(),taskId:task.id,cycleKey:key,assignedTo:null,
           status:'pending',dueDate:sundayEndOf(today).toISOString(),swapRequestedBy:null});
+        changed = true;
       }
     }
   });
-  save();
+  // 只有真的新增了循環任務時才存檔/同步，避免每次畫面重繪都重新推送整包資料，
+  // 跟對方裝置互相覆蓋造成「看不到對方指派的任務」。
+  if(changed) save();
 }
 
 function assignmentStatusInfo(a){
@@ -346,6 +357,21 @@ function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(
 let currentTab = 'tasks';
 let storageWarningDismissed = false;
 let modalOpen = false; // 有彈窗開著時，避免雲端同步強制重繪把彈窗蓋掉
+let deferredRenderPending = false;
+function isEditingSomething(){
+  const el = document.activeElement;
+  return !!el && ['INPUT','SELECT','TEXTAREA'].includes(el.tagName);
+}
+function scheduleDeferredRender(){
+  if(deferredRenderPending) return;
+  deferredRenderPending = true;
+  const handler = ()=>{
+    deferredRenderPending = false;
+    document.removeEventListener('focusout', handler, true);
+    setTimeout(()=>{ if(!modalOpen && !isEditingSomething()) render(); }, 200);
+  };
+  document.addEventListener('focusout', handler, true);
+}
 function storageWarningBanner(){
   if(!storagePersistCheckFailed || storageWarningDismissed) return '';
   return `<div class="card" style="border-color:var(--danger);margin:12px 16px 0;">
@@ -533,6 +559,7 @@ function bindTab(){
 }
 
 /* ---------- 任務 Tab ---------- */
+let tasksViewMode = 'mine'; // 'mine' = 依身份分類, 'all' = 全部人進度總覽
 function renderTasksTab(){
   const soonList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='soon');
   const overdueList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='overdue');
@@ -544,6 +571,22 @@ function renderTasksTab(){
     </div>`;
     maybeNotify(overdueList.length, soonList.length);
   }
+  const switcher = `<div class="switcher">
+    <button data-tasks-view="mine" class="${tasksViewMode==='mine'?'active':''}">📂 依身份分類</button>
+    <button data-tasks-view="all" class="${tasksViewMode==='all'?'active':''}">👀 全部人進度總覽</button>
+  </div>`;
+  const body = state.tasks.length
+    ? (tasksViewMode==='all' ? renderOverviewList() : renderMineOtherView())
+    : `<div class="empty-state">還沒有家務任務，點下方「新增任務」開始吧 ✨</div>`;
+  return `
+    ${banner}
+    <button class="btn primary" style="width:100%;" id="open-add-task">➕ 新增任務</button>
+    ${switcher}
+    <div style="margin-top:12px;">${body}</div>
+    <div id="modal-slot"></div>
+  `;
+}
+function renderMineOtherView(){
   const me = currentUser(); const other = partnerOf(state.currentUserId);
   const groups = { mine:[], other:[], unassigned:[] };
   state.tasks.forEach(t=>{
@@ -557,17 +600,48 @@ function renderTasksTab(){
     if(!tasks.length) return '';
     return `<h3 style="margin:16px 4px 8px;">${title}</h3>` + tasks.map(t=>renderTaskCard(t)).join('');
   }
-  const body = state.tasks.length
-    ? section('🙋 我的任務（'+me.name+'）', groups.mine)
-      + section('🙆 '+other.name+' 的任務', groups.other)
-      + section('❔ 尚未指派', groups.unassigned)
-    : `<div class="empty-state">還沒有家務任務，點下方「新增任務」開始吧 ✨</div>`;
-  return `
-    ${banner}
-    <button class="btn primary" style="width:100%;" id="open-add-task">➕ 新增任務</button>
-    <div style="margin-top:12px;">${body}</div>
-    <div id="modal-slot"></div>
-  `;
+  return section('🙋 我的任務（'+me.name+'）', groups.mine)
+    + section('🙆 '+other.name+' 的任務', groups.other)
+    + section('❔ 尚未指派', groups.unassigned);
+}
+/* 全部人進度總覽：不分身份，列出每個任務目前指派給誰、進度如何 */
+function renderOverviewList(){
+  const rows = state.tasks.map(t=>{
+    const list = state.assignments.filter(a=>a.taskId===t.id).sort((a,b)=>(b.cycleKey>a.cycleKey?1:-1));
+    const a = list[0];
+    const info = a ? assignmentStatusInfo(a) : {label:'尚未指派',cls:'pending'};
+    const assignee = a && a.assignedTo ? state.users.find(u=>u.id===a.assignedTo) : null;
+    const doneBy = a && a.status==='done' && a.doneBy ? state.users.find(u=>u.id===a.doneBy) : null;
+    const doneAt = a && a.doneAt ? new Date(a.doneAt) : null;
+    return {t, a, info, assignee, doneBy, doneAt};
+  }).sort((x,y)=>{
+    // 已逾期 > 即將到期 > 待處理 > 已完成，同狀態依名稱排序
+    const order = {overdue:0, soon:1, pending:2, done:3};
+    const ox = order[x.info.cls] ?? 2, oy = order[y.info.cls] ?? 2;
+    return ox!==oy ? ox-oy : x.t.name.localeCompare(y.t.name);
+  });
+  const doneCount = rows.filter(r=>r.info.cls==='done').length;
+  const summary = `<div class="card" style="margin-bottom:10px;">
+    <div class="muted">全部 ${rows.length} 項任務中，已完成 <b>${doneCount}</b> 項</div>
+  </div>`;
+  const list = rows.map(r=>{
+    const who = r.assignee ? r.assignee.name : '尚未指派';
+    const doneNote = r.info.cls==='done'
+      ? `<div class="muted" style="margin-top:4px;">✔ 由 ${r.doneBy?r.doneBy.name:'—'} 完成${r.doneAt?'（'+r.doneAt.toLocaleString()+'）':''}</div>`
+      : '';
+    return `<div class="card">
+      <div class="row">
+        <h3>${r.t.name}</h3>
+        <span class="pill ${r.info.cls}">${r.info.label}</span>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <div class="muted">負責人：${who}</div>
+        <span class="badge-diff">${r.t.frequency}</span>
+      </div>
+      ${doneNote}
+    </div>`;
+  }).join('');
+  return summary + list;
 }
 function renderTaskCard(task){
   const assignmentsForTask = state.assignments.filter(a=>a.taskId===task.id)
@@ -629,6 +703,9 @@ function maybeNotify(overdueCount, soonCount){
 function bindTasksTab(){
   const openBtn=document.getElementById('open-add-task');
   if(openBtn) openBtn.onclick=()=>showAddTaskModal();
+  document.querySelectorAll('[data-tasks-view]').forEach(b=>b.onclick=()=>{
+    tasksViewMode = b.dataset.tasksView; render();
+  });
   document.querySelectorAll('[data-assign]').forEach(s=>s.onchange=(e)=>{
     const a=state.assignments.find(x=>x.id===s.dataset.assign);
     a.assignedTo = e.target.value || null; save(); render();
