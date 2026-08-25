@@ -223,6 +223,28 @@ function pushCloudNow(){
 }
 function flushCloudNow(){ clearTimeout(cloudPushTimer); pushCloudNow(); }
 let lastAppliedCloudUpdatedAt = 0;
+let knownTaskIds = null; // null = 還沒建立基準，第一次同步不通知，避免一打開就轟炸一堆通知
+function notifyNewTask(task){
+  const creator = state.users.find(u=>u.id===task.createdBy);
+  const who = creator ? creator.name : '對方';
+  const body = who + ' 新增了任務：' + task.name;
+  if('Notification' in window && Notification.permission==='granted'){
+    try{ new Notification('📋 新增任務', { body }); }catch(e){}
+  }
+  toast('📋 ' + body);
+}
+function checkNewTaskNotifications(tasks){
+  if(!Array.isArray(tasks)) return;
+  const newIds = new Set(tasks.map(t=>t.id));
+  if(knownTaskIds){
+    tasks.forEach(t=>{
+      if(!knownTaskIds.has(t.id) && t.createdBy!==state.currentUserId){
+        notifyNewTask(t);
+      }
+    });
+  }
+  knownTaskIds = newIds;
+}
 function applyCloudSnapshot(coupleId, val){
   if(!val) return;
   if(val.data && val.data.updatedAt && val.data.updatedAt <= lastAppliedCloudUpdatedAt) return; // 已是舊資料或自己的回音，跳過
@@ -242,6 +264,7 @@ function applyCloudSnapshot(coupleId, val){
   state.couple.inviteCode = val.inviteCode || (state.couple && state.couple.inviteCode);
   if(val.data){ SHARED_KEYS.forEach(k=>{ if(val.data[k]!==undefined) state[k]=val.data[k]; }); }
   if(!state.currentUserId || !state.users.find(u=>u.id===state.currentUserId)) state.currentUserId = fbUid;
+  checkNewTaskNotifications(state.tasks);
   if(placeholderJustReplaced){
     // 對方真的用邀請碼加入了：把之前指派給「佔位對方」的任務，自動轉交給真正加入的人，
     // 這樣就不會變成「尚未指派」，需要重新指派一次。
@@ -1121,6 +1144,7 @@ function renderSettingsTab(){
       <label>提前提醒時數</label>
       <input id="set-remind-hours" type="number" value="${state.reminderHours}">
       <button class="btn ghost sm" style="margin-top:10px;" id="ask-notif">${notifPerm==='granted'?'✅ 已開啟瀏覽器通知':'開啟瀏覽器通知'}</button>
+      <p class="muted" style="margin-top:8px;">開啟後：任務逾期/即將到期會提醒，另外只要對方新增了任務，這台裝置也會跳出通知（App 需保持開著或在背景分頁，完全關閉瀏覽器則收不到）。</p>
     </div>
     <div class="card">
       <h3>🎨 外觀</h3>
