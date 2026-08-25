@@ -445,6 +445,8 @@ function renderOnboarding(){
       <div class="card">
         <label>你的名字</label>
         <input id="ob-name" placeholder="例如：小明">
+        <label style="margin-top:8px;">對方的名字（選填，之後對方用邀請碼加入會自動換成正確的身份）</label>
+        <input id="ob-partner-placeholder-name" placeholder="例如：小美（不填就先顯示「對方（尚未加入）」）">
         <button class="btn primary" style="width:100%;margin-top:14px;" id="ob-create">建立我的家務空間</button>
       </div>
       <div class="card">
@@ -484,6 +486,7 @@ function bindOnboarding(){
   const create = document.getElementById('ob-create');
   if(create) create.onclick=async ()=>{
     const name=document.getElementById('ob-name').value.trim();
+    const partnerPlaceholderName=(document.getElementById('ob-partner-placeholder-name').value||'').trim() || '對方（尚未加入）';
     if(!name){ toast('請輸入名字'); return; }
     setBusy(create, true, '建立中…', '建立我的家務空間');
     try{
@@ -492,7 +495,7 @@ function bindOnboarding(){
       state.couple = { id: coupleId, cloudCoupleId: coupleId, inviteCode, createdAt: new Date().toISOString() };
       state.users = [
         { id: myUid, name, theme:'light' },
-        { id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' }
+        { id: PENDING_PARTNER_ID, name: partnerPlaceholderName, theme:'light' }
       ];
       state.currentUserId = myUid;
       save(); subscribeCloud(coupleId); render();
@@ -505,7 +508,7 @@ function bindOnboarding(){
         state.couple={id:uid(), inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(), createdAt:new Date().toISOString()};
         state.users=[
           {id:userId,name,theme:'light'},
-          { id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' }
+          { id: PENDING_PARTNER_ID, name: partnerPlaceholderName, theme:'light' }
         ];
         state.currentUserId=userId;
         save(); render();
