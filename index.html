@@ -203,6 +203,7 @@ function save(){
 /* ---------------- 雲端同步（Firebase Realtime Database） ---------------- */
 function isCloudLinked(){ return !!(state.couple && state.couple.cloudCoupleId); }
 const SHARED_KEYS = ['tasks','assignments','ledger','rewards','rewardClaims','penalties','penaltyExecutions','reminderHours'];
+const PENDING_PARTNER_ID = '__pending_partner__'; // 佔位用的「示範對方」，等真人用邀請碼加入後會自動被取代
 function sharedPayload(){
   const out={};
   SHARED_KEYS.forEach(k=>out[k]=state[k]);
@@ -228,12 +229,32 @@ function applyCloudSnapshot(coupleId, val){
   if(val.data && val.data.updatedAt) lastAppliedCloudUpdatedAt = val.data.updatedAt;
   const memberUids = val.memberUids ? Object.keys(val.memberUids) : [];
   const memberNames = val.memberNames || {};
-  state.users = memberUids.map(uidKey=>({id:uidKey, name: memberNames[uidKey] || '對方'}));
+  let newUsers = memberUids.map(uidKey=>({id:uidKey, name: memberNames[uidKey] || '對方'}));
+  // 雲端目前只有 1 位真人成員時，如果本機還留著「佔位對方」（模擬對方已加入），先保留它，
+  // 讓主使用者可以立刻開始使用；等對方真的用邀請碼加入（雲端變成 2 位成員）後，
+  // 就會自動用真人取代掉這個佔位對方。
+  const placeholder = state.users && state.users.find(u=>u.id===PENDING_PARTNER_ID);
+  const placeholderJustReplaced = !!placeholder && newUsers.length>=2; // 真人剛加入，佔位對方要被取代
+  if(newUsers.length<2 && placeholder) newUsers.push(placeholder);
+  state.users = newUsers;
   state.couple = state.couple || {};
   state.couple.cloudCoupleId = coupleId;
   state.couple.inviteCode = val.inviteCode || (state.couple && state.couple.inviteCode);
   if(val.data){ SHARED_KEYS.forEach(k=>{ if(val.data[k]!==undefined) state[k]=val.data[k]; }); }
   if(!state.currentUserId || !state.users.find(u=>u.id===state.currentUserId)) state.currentUserId = fbUid;
+  if(placeholderJustReplaced){
+    // 對方真的用邀請碼加入了：把之前指派給「佔位對方」的任務，自動轉交給真正加入的人，
+    // 這樣就不會變成「尚未指派」，需要重新指派一次。
+    const realPartner = state.users.find(u=>u.id!==state.currentUserId);
+    if(realPartner){
+      (state.assignments||[]).forEach(a=>{
+        if(a.assignedTo===PENDING_PARTNER_ID) a.assignedTo = realPartner.id;
+        if(a.swapRequestedBy===PENDING_PARTNER_ID) a.swapRequestedBy = realPartner.id;
+      });
+      toast('🎉 對方已加入！之前指派給示範對象的任務已自動轉給對方');
+      queueCloudPush(); // 把轉交後的結果同步回雲端，讓對方也看到正確的指派
+    }
+  }
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
   if(modalOpen || isEditingSomething()){
     // 有彈窗開著、或正在點選欄位（例如指派任務的下拉選單）時，先不要強制重繪，
@@ -390,6 +411,12 @@ function bindStorageWarning(){
 function render(){
   document.documentElement.setAttribute('data-theme', state.theme);
   const app = document.getElementById('app');
+  // 相容舊資料：如果之前已經建立過空間、但當時還只有自己一個人（尚未有這次的「先模擬對方加入」功能），
+  // 現在自動補上佔位對方，讓主使用者不用卡在等待畫面。
+  if(state.couple && state.currentUserId && state.users.length===1 && state.users[0].id===state.currentUserId){
+    state.users.push({ id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' });
+    save();
+  }
   if(!state.couple || state.users.length<2){
     app.innerHTML = storageWarningBanner() + renderOnboarding();
     bindOnboarding();
@@ -463,17 +490,23 @@ function bindOnboarding(){
       const { coupleId, myUid, inviteCode } = await cloudCreateCouple(name);
       fbUid = myUid;
       state.couple = { id: coupleId, cloudCoupleId: coupleId, inviteCode, createdAt: new Date().toISOString() };
-      state.users = [{ id: myUid, name, theme:'light' }];
+      state.users = [
+        { id: myUid, name, theme:'light' },
+        { id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' }
+      ];
       state.currentUserId = myUid;
       save(); subscribeCloud(coupleId); render();
-      toast('已建立並連上雲端 ☁️');
+      toast('已建立並連上雲端，先自己用起來吧 ☁️');
     }catch(e){
       console.warn('雲端建立失敗', e);
       setObStatus('雲端連線失敗：'+describeError(e));
       if(confirm('雲端連線失敗（'+describeError(e)+'）。\n要不要先用本機示範模式建立（之後可再嘗試連雲端）？')){
         const userId=uid();
         state.couple={id:uid(), inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(), createdAt:new Date().toISOString()};
-        state.users=[{id:userId,name,theme:'light'}];
+        state.users=[
+          {id:userId,name,theme:'light'},
+          { id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' }
+        ];
         state.currentUserId=userId;
         save(); render();
       }
@@ -1078,6 +1111,7 @@ function renderSettingsTab(){
       ${state.users.map(u=>`<div class="row" style="padding:4px 0;">${u.name} ${u.id===state.currentUserId?'（目前身份）':''}</div>`).join('')}
       <div class="muted" style="margin-top:6px;">邀請碼：${state.couple.inviteCode}</div>
       <div class="muted" style="margin-top:6px;">${isCloudLinked()?'☁️ 已連上雲端，兩人資料會自動同步':'⚠️ 尚未連上雲端，資料只存在這台裝置（可用下方同步碼手動同步）'}</div>
+      ${state.users.find(u=>u.id===PENDING_PARTNER_ID)?'<div class="muted" style="margin-top:6px;">💬 「對方（尚未加入）」是暫時的示範對象，把上面的邀請碼給對方，等對方輸入邀請碼加入後會自動換成真人。</div>':''}
     </div>
     <div class="card">
       <h3>🔔 提醒設定</h3>
