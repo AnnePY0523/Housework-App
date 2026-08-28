@@ -61,6 +61,8 @@
   .switcher{display:flex;background:var(--bg);border-radius:10px;padding:4px;gap:4px;margin-top:8px;}
   .switcher button{flex:1;border:none;background:transparent;padding:8px;border-radius:8px;
     font-size:13px;cursor:pointer;color:var(--sub);}
+  .switcher.wrap4{flex-wrap:wrap;}
+  .switcher.wrap4 button{flex:1 1 45%;font-size:12.5px;padding:8px 4px;}
   .switcher button.active{background:var(--primary);color:#fff;font-weight:700;}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;
     justify-content:center;z-index:50;padding:20px;}
@@ -262,6 +264,7 @@ function applyCloudSnapshot(coupleId, val){
   state.couple = state.couple || {};
   state.couple.cloudCoupleId = coupleId;
   state.couple.inviteCode = val.inviteCode || (state.couple && state.couple.inviteCode);
+  state.couple.creatorUid = val.creatorUid || (state.couple && state.couple.creatorUid);
   if(val.data){ SHARED_KEYS.forEach(k=>{ if(val.data[k]!==undefined) state[k]=val.data[k]; }); }
   if(!state.currentUserId || !state.users.find(u=>u.id===state.currentUserId)) state.currentUserId = fbUid;
   checkNewTaskNotifications(state.tasks);
@@ -301,7 +304,7 @@ async function cloudCreateCouple(name){
   const inviteCode = Math.random().toString(36).slice(2,8).toUpperCase();
   await set(ref(fbDb, 'invites/'+inviteCode), { coupleId });
   await set(ref(fbDb, 'couples/'+coupleId), {
-    inviteCode, memberUids: { [myUid]: true }, memberNames: { [myUid]: name }, data: sharedPayload()
+    inviteCode, memberUids: { [myUid]: true }, memberNames: { [myUid]: name }, creatorUid: myUid, data: sharedPayload()
   });
   return { coupleId, myUid, inviteCode };
 }
@@ -326,6 +329,16 @@ window.addEventListener('pagehide', ()=>{ flushCloudNow(); });
 
 function currentUser(){ return state.users.find(u=>u.id===state.currentUserId); }
 function partnerOf(userId){ return state.users.find(u=>u.id!==userId); }
+// 主使用者＝建立這個家庭空間的人；副使用者＝之後用邀請碼加入的人。這兩個角色是固定的，
+// 不會因為換裝置/換身份而改變（跟「我的／對方的」不同，那是相對於目前這台裝置的身份）。
+function mainUserOf(){
+  const cid = state.couple && state.couple.creatorUid;
+  return (cid && state.users.find(u=>u.id===cid)) || state.users[0];
+}
+function secondaryUserOf(){
+  const main = mainUserOf();
+  return state.users.find(u=>u.id!==(main && main.id)) || state.users[1];
+}
 
 /* ---------------- 週期任務產生 ---------------- */
 function ensureAssignments(){
@@ -440,6 +453,14 @@ function render(){
     state.users.push({ id: PENDING_PARTNER_ID, name: '對方（尚未加入）', theme:'light' });
     save();
   }
+  // 相容舊資料：舊版沒有記錄「主使用者」是誰，第一次偵測到缺少時補上（並同步回雲端，讓兩邊看到一致的結果）。
+  if(state.couple && !state.couple.creatorUid && state.currentUserId){
+    state.couple.creatorUid = state.currentUserId;
+    save();
+    if(isCloudLinked() && cloudReady && fbUid && state.couple.cloudCoupleId){
+      update(ref(fbDb, 'couples/'+state.couple.cloudCoupleId), { creatorUid: state.currentUserId }).catch(()=>{});
+    }
+  }
   if(!state.couple || state.users.length<2){
     app.innerHTML = storageWarningBanner() + renderOnboarding();
     bindOnboarding();
@@ -447,6 +468,7 @@ function render(){
     return;
   }
   ensureAssignments();
+  runDailyPenaltyAutoCheck();
   app.innerHTML = `
     ${renderHeader()}
     ${storageWarningBanner()}
@@ -515,7 +537,7 @@ function bindOnboarding(){
     try{
       const { coupleId, myUid, inviteCode } = await cloudCreateCouple(name);
       fbUid = myUid;
-      state.couple = { id: coupleId, cloudCoupleId: coupleId, inviteCode, createdAt: new Date().toISOString() };
+      state.couple = { id: coupleId, cloudCoupleId: coupleId, inviteCode, createdAt: new Date().toISOString(), creatorUid: myUid };
       state.users = [
         { id: myUid, name, theme:'light' },
         { id: PENDING_PARTNER_ID, name: partnerPlaceholderName, theme:'light' }
@@ -528,7 +550,7 @@ function bindOnboarding(){
       setObStatus('雲端連線失敗：'+describeError(e));
       if(confirm('雲端連線失敗（'+describeError(e)+'）。\n要不要先用本機示範模式建立（之後可再嘗試連雲端）？')){
         const userId=uid();
-        state.couple={id:uid(), inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(), createdAt:new Date().toISOString()};
+        state.couple={id:uid(), inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(), createdAt:new Date().toISOString(), creatorUid:userId};
         state.users=[
           {id:userId,name,theme:'light'},
           { id: PENDING_PARTNER_ID, name: partnerPlaceholderName, theme:'light' }
@@ -618,10 +640,10 @@ function bindTab(){
 }
 
 /* ---------- 任務 Tab ---------- */
-let tasksViewMode = 'mine'; // 'mine' = 依身份分類, 'all' = 全部人進度總覽
+let tasksViewMode = 'main'; // 'main' 主使用者任務 / 'secondary' 副使用者任務 / 'all' 全部人進度總覽 / 'history' 歷史紀錄
 function renderTasksTab(){
-  const soonList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='soon');
-  const overdueList = state.assignments.filter(a=>assignmentStatusInfo(a).cls==='overdue');
+  const soonList = state.assignments.filter(a=>a.status!=='done' && assignmentStatusInfo(a).cls==='soon');
+  const overdueList = state.assignments.filter(a=>a.status!=='done' && assignmentStatusInfo(a).cls==='overdue');
   let banner='';
   if(overdueList.length || soonList.length){
     banner = `<div class="card" style="border-color:var(--warn);">
@@ -630,12 +652,18 @@ function renderTasksTab(){
     </div>`;
     maybeNotify(overdueList.length, soonList.length);
   }
-  const switcher = `<div class="switcher">
-    <button data-tasks-view="mine" class="${tasksViewMode==='mine'?'active':''}">📂 依身份分類</button>
+  const mainU = mainUserOf(); const secU = secondaryUserOf();
+  const switcher = `<div class="switcher wrap4">
+    <button data-tasks-view="main" class="${tasksViewMode==='main'?'active':''}">🙋 主使用者任務${mainU?'（'+mainU.name+'）':''}</button>
+    <button data-tasks-view="secondary" class="${tasksViewMode==='secondary'?'active':''}">🙆 副使用者任務${secU?'（'+secU.name+'）':''}</button>
     <button data-tasks-view="all" class="${tasksViewMode==='all'?'active':''}">👀 全部人進度總覽</button>
+    <button data-tasks-view="history" class="${tasksViewMode==='history'?'active':''}">📜 歷史紀錄</button>
   </div>`;
   const body = state.tasks.length
-    ? (tasksViewMode==='all' ? renderOverviewList() : renderMineOtherView())
+    ? (tasksViewMode==='all' ? renderOverviewList()
+       : tasksViewMode==='history' ? renderHistoryView()
+       : tasksViewMode==='secondary' ? renderPersonView(secU)
+       : renderPersonView(mainU))
     : `<div class="empty-state">還沒有家務任務，點下方「新增任務」開始吧 ✨</div>`;
   return `
     ${banner}
@@ -645,23 +673,50 @@ function renderTasksTab(){
     <div id="modal-slot"></div>
   `;
 }
-function renderMineOtherView(){
-  const me = currentUser(); const other = partnerOf(state.currentUserId);
-  const groups = { mine:[], other:[], unassigned:[] };
+/* 主使用者／副使用者任務：固定角色（不隨裝置身份改變），只顯示「進行中」（未完成）的任務，
+   已完成的任務會自動移到「歷史紀錄」，這裡就不會再顯示。 */
+function renderPersonView(person){
+  if(!person) return `<div class="empty-state">目前還只有一位成員，等對方加入後就會顯示</div>`;
+  const mine = []; const unassigned = [];
   state.tasks.forEach(t=>{
     const list = state.assignments.filter(a=>a.taskId===t.id).sort((a,b)=>(b.cycleKey>a.cycleKey?1:-1));
     const a = list[0];
-    if(!a || !a.assignedTo) groups.unassigned.push(t);
-    else if(a.assignedTo===state.currentUserId) groups.mine.push(t);
-    else groups.other.push(t);
+    if(!a || a.status==='done') return;
+    if(!a.assignedTo) unassigned.push(t);
+    else if(a.assignedTo===person.id) mine.push(t);
   });
   function section(title, tasks){
     if(!tasks.length) return '';
     return `<h3 style="margin:16px 4px 8px;">${title}</h3>` + tasks.map(t=>renderTaskCard(t)).join('');
   }
-  return section('🙋 我的任務（'+me.name+'）', groups.mine)
-    + section('🙆 '+other.name+' 的任務', groups.other)
-    + section('❔ 尚未指派', groups.unassigned);
+  const body = section('📋 '+person.name+' 的任務', mine) + section('❔ 尚未指派', unassigned);
+  return body || `<div class="empty-state">${person.name} 目前沒有進行中的任務 🎉</div>`;
+}
+/* 歷史紀錄：所有已標記完成的任務，不分是誰完成的 */
+function renderHistoryView(){
+  const rows = [];
+  state.assignments.forEach(a=>{
+    if(a.status!=='done') return;
+    const task = state.tasks.find(t=>t.id===a.taskId);
+    if(!task) return;
+    const doneBy = a.doneBy ? state.users.find(u=>u.id===a.doneBy) : null;
+    rows.push({task, a, doneBy});
+  });
+  if(!rows.length) return `<div class="empty-state">還沒有完成紀錄，完成任務後會自動出現在這裡 📜</div>`;
+  rows.sort((x,y)=> new Date(y.a.doneAt||0) - new Date(x.a.doneAt||0));
+  const summary = `<div class="card" style="margin-bottom:10px;"><div class="muted">共 <b>${rows.length}</b> 筆已完成紀錄</div></div>`;
+  const list = rows.map(r=>`<div class="card">
+    <div class="row">
+      <h3>${r.task.name}</h3>
+      <span class="pill done">已完成</span>
+    </div>
+    <div class="muted" style="margin-top:6px;">由 ${r.doneBy?r.doneBy.name:'—'} 完成${r.a.doneAt?'（'+new Date(r.a.doneAt).toLocaleString()+'）':''}</div>
+    <div class="row" style="margin-top:8px;">
+      <span class="badge-diff">${r.task.difficulty} · +${DIFF_POINTS[r.task.difficulty]||5}分</span>
+      <span class="badge-diff">${r.task.frequency}</span>
+    </div>
+  </div>`).join('');
+  return summary + list;
 }
 /* 全部人進度總覽：不分身份，列出每個任務目前指派給誰、進度如何 */
 function renderOverviewList(){
@@ -985,21 +1040,47 @@ function periodInfo(scope){
   }
   return { since: mondayOf(today).toISOString(), key:'w-'+toKey(mondayOf(today)), label:'本週' };
 }
+/* 每日自動檢查懲罰：每天（00:00~23:59內）每個規則、每個人最多檢查一次，
+   若當期累積積分還沒達到門檻就自動扣分；只要還沒達標，之後每天都會再檢查、再扣一次。 */
+function runDailyPenaltyAutoCheck(){
+  if(!state.penalties || !state.penalties.length) return;
+  const todayKey = toKey(todayDate());
+  let changed = false;
+  state.penalties.forEach(p=>{
+    const period = periodInfo(p.scope);
+    state.users.forEach(u=>{
+      if(u.id===PENDING_PARTNER_ID) return; // 佔位對象不是真人，不需要懲罰
+      const already = state.penaltyExecutions.find(e=>e.penaltyId===p.id && e.userId===u.id && e.periodKey===period.key && e.dayKey===todayKey);
+      if(already) return;
+      const pts = sumFor(u.id, period.since, false);
+      if(pts < p.threshold){
+        state.ledger.push({id:uid(), userId:u.id, assignmentId:null,
+          points:-Math.abs(p.penaltyPoints), awardedAt:new Date().toISOString(), reason:'penalty:'+p.id});
+        state.penaltyExecutions.push({id:uid(), penaltyId:p.id, userId:u.id, periodKey:period.key, dayKey:todayKey, executedAt:new Date().toISOString()});
+        changed = true;
+      }
+    });
+  });
+  if(changed) save();
+}
 function renderPenaltyCard(p){
   const period = periodInfo(p.scope);
-  const rows = state.users.map(u=>{
+  const todayKey = toKey(todayDate());
+  const rows = state.users.filter(u=>u.id!==PENDING_PARTNER_ID).map(u=>{
     const pts = sumFor(u.id, period.since, false);
     const met = pts >= p.threshold;
-    const executed = state.penaltyExecutions.find(e=>e.penaltyId===p.id && e.userId===u.id && e.periodKey===period.key);
+    const execThisPeriod = state.penaltyExecutions.filter(e=>e.penaltyId===p.id && e.userId===u.id && e.periodKey===period.key);
+    const checkedToday = execThisPeriod.some(e=>e.dayKey===todayKey);
+    const totalDeducted = execThisPeriod.length * p.penaltyPoints;
     const pct = Math.min(100, Math.round(pts/p.threshold*100)) || 0;
     return `<div style="margin-top:10px;">
       <div class="row"><span>${u.name}</span><span class="muted">${pts} / ${p.threshold} 分（${period.label}）</span></div>
       <div class="bar-wrap" style="height:8px;margin-top:4px;"><div class="bar" style="width:${pct}%;${met?'':'background:linear-gradient(90deg,#f87171,#fb923c);'}"></div></div>
       ${met
         ? `<span class="pill done" style="margin-top:6px;display:inline-block;">✅ 達標，本期免懲罰</span>`
-        : executed
-          ? `<span class="pill overdue" style="margin-top:6px;display:inline-block;">⚡ 已執行懲罰（${executed.executedAt.slice(0,10)}）</span>`
-          : `<button class="btn ghost sm" style="margin-top:6px;border-color:var(--danger);color:var(--danger);" data-execute-penalty="${p.id}|${u.id}">⚡ 執行懲罰（扣${p.penaltyPoints}分）</button>`}
+        : execThisPeriod.length
+          ? `<span class="pill overdue" style="margin-top:6px;display:inline-block;">⚡ 本期已自動扣 ${execThisPeriod.length} 次，共 ${totalDeducted} 分${checkedToday?'（今天已檢查過）':''}</span>`
+          : `<span class="pill overdue" style="margin-top:6px;display:inline-block;">⚡ 未達標，系統將自動扣分</span>`}
     </div>`;
   }).join('');
   return `<div class="card">
@@ -1008,12 +1089,13 @@ function renderPenaltyCard(p){
       <span class="badge-diff">${period.label}低於 ${p.threshold} 分</span>
     </div>
     <div class="muted" style="margin-top:4px;">懲罰內容：${p.penaltyText}</div>
+    <div class="muted" style="margin-top:4px;font-size:11.5px;">系統每天會自動檢查一次，未達標會自動扣分，且會持續每天扣到達標為止，不需要手動執行。</div>
     ${rows}
     <div style="margin-top:10px;text-align:right;"><button class="btn ghost sm" data-del-penalty="${p.id}">🗑 刪除規則</button></div>
   </div>`;
 }
 function renderRewardCard(reward){
-  const rows = state.users.map(u=>{
+  const rows = state.users.filter(u=>u.id!==PENDING_PARTNER_ID).map(u=>{
     const pts = sumFor(u.id, null, false);
     const claimed = state.rewardClaims.find(c=>c.rewardId===reward.id && c.userId===u.id);
     const pct = Math.min(100, Math.round(pts/reward.threshold*100)) || 0;
@@ -1042,8 +1124,16 @@ function bindRewardSection(){
   document.getElementById('open-add-reward').onclick=()=>showAddRewardModal();
   document.querySelectorAll('[data-claim]').forEach(b=>b.onclick=()=>{
     const [rewardId,userId]=b.dataset.claim.split('|');
+    const reward = state.rewards.find(r=>r.id===rewardId);
+    if(!reward) return;
+    const already = state.rewardClaims.find(c=>c.rewardId===rewardId && c.userId===userId);
+    if(already){ toast('這個獎勵已經兌換過了'); return; }
+    const currentPts = sumFor(userId, null, false);
+    if(currentPts < reward.threshold){ toast('積分不足，無法兌換'); return; }
     state.rewardClaims.push({id:uid(),rewardId,userId,claimedAt:new Date().toISOString()});
-    save(); render(); toast('🎉 兌換成功！記得跟對方領取獎勵～');
+    state.ledger.push({id:uid(), userId, assignmentId:null,
+      points:-Math.abs(reward.threshold), awardedAt:new Date().toISOString(), reason:'reward:'+rewardId});
+    save(); render(); toast('🎉 兌換成功！已扣除 '+reward.threshold+' 分，記得跟對方領取獎勵～');
   });
   document.querySelectorAll('[data-del-reward]').forEach(b=>b.onclick=()=>{
     if(!confirm('確定刪除此獎勵？兌換紀錄也會一併移除')) return;
@@ -1055,16 +1145,6 @@ function bindRewardSection(){
 function bindPenaltySection(){
   const openBtn=document.getElementById('open-add-penalty');
   if(openBtn) openBtn.onclick=()=>showAddPenaltyModal();
-  document.querySelectorAll('[data-execute-penalty]').forEach(b=>b.onclick=()=>{
-    const [penaltyId,userId]=b.dataset.executePenalty.split('|');
-    const p = state.penalties.find(x=>x.id===penaltyId);
-    const period = periodInfo(p.scope);
-    if(!confirm(`確定對這期執行懲罰？\n扣 ${p.penaltyPoints} 分\n懲罰內容：${p.penaltyText}`)) return;
-    state.ledger.push({id:uid(), userId, assignmentId:null,
-      points:-Math.abs(p.penaltyPoints), awardedAt:new Date().toISOString(), reason:'penalty:'+p.id});
-    state.penaltyExecutions.push({id:uid(), penaltyId, userId, periodKey:period.key, executedAt:new Date().toISOString()});
-    save(); render(); toast('⚡ 已執行懲罰：'+p.penaltyText);
-  });
   document.querySelectorAll('[data-del-penalty]').forEach(b=>b.onclick=()=>{
     if(!confirm('確定刪除此懲罰規則？執行紀錄也會一併移除')) return;
     state.penalties = state.penalties.filter(x=>x.id!==b.dataset.delPenalty);
